@@ -1,10 +1,8 @@
 """Text-to-Speech engine with chunking support for edge-tts."""
 
-import io
 import os
 import re
 import logging
-from typing import AsyncIterator
 
 import edge_tts
 
@@ -59,7 +57,6 @@ async def synthesize_chapter(
     text: str,
     voice_id: str,
     output_path: str,
-    on_progress: None = None,
 ) -> str:
     """Convert chapter text to a single MP3 file.
 
