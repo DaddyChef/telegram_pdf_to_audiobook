@@ -1,12 +1,13 @@
 """Text-to-Speech engine with chunking support for edge-tts."""
 
+import asyncio
 import os
 import re
 import logging
 
 import edge_tts
 
-from config import TTS_CHUNK_SIZE
+from config import TTS_CHUNK_SIZE, TTS_CHUNK_TIMEOUT, TTS_CHUNK_RETRIES
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,61 @@ def _split_into_chunks(text: str, max_chars: int = TTS_CHUNK_SIZE) -> list[str]:
     return [c for c in chunks if c]
 
 
+async def _synthesize_chunk(
+    chunk: str,
+    voice_id: str,
+    outfile: object,
+    chunk_num: int,
+    total_chunks: int,
+) -> None:
+    """Synthesize a single text chunk with timeout and retry logic.
+
+    Retries up to TTS_CHUNK_RETRIES times if edge-tts hangs or fails.
+    Each attempt has a TTS_CHUNK_TIMEOUT second timeout.
+    """
+    last_error: Exception | None = None
+
+    for attempt in range(1, TTS_CHUNK_RETRIES + 1):
+        try:
+            logger.info(
+                "Chunk %d/%d — attempt %d, %d chars",
+                chunk_num, total_chunks, attempt, len(chunk),
+            )
+            communicate = edge_tts.Communicate(chunk, voice_id)
+
+            async def _stream_audio() -> None:
+                async for msg in communicate.stream():
+                    if msg["type"] == "audio":
+                        outfile.write(msg["data"])
+
+            await asyncio.wait_for(_stream_audio(), timeout=TTS_CHUNK_TIMEOUT)
+            logger.info("Chunk %d/%d — done", chunk_num, total_chunks)
+            return  # success
+
+        except asyncio.TimeoutError:
+            last_error = TimeoutError(
+                f"Chunk {chunk_num}/{total_chunks} timed out after "
+                f"{TTS_CHUNK_TIMEOUT}s (attempt {attempt}/{TTS_CHUNK_RETRIES})"
+            )
+            logger.warning(str(last_error))
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                "Chunk %d/%d — error on attempt %d: %s",
+                chunk_num, total_chunks, attempt, e,
+            )
+
+        # Brief pause before retry
+        if attempt < TTS_CHUNK_RETRIES:
+            await asyncio.sleep(2)
+
+    # All retries exhausted
+    raise RuntimeError(
+        f"Failed to synthesize chunk {chunk_num}/{total_chunks} "
+        f"after {TTS_CHUNK_RETRIES} attempts"
+    ) from last_error
+
+
 async def synthesize_chapter(
     text: str,
     voice_id: str,
@@ -60,9 +116,9 @@ async def synthesize_chapter(
 ) -> str:
     """Convert chapter text to a single MP3 file.
 
-    Splits text into manageable chunks, converts each with edge-tts,
-    and concatenates the raw MP3 bytes (MP3 frames are independent so
-    binary concatenation works correctly).
+    Splits text into manageable chunks, converts each with edge-tts
+    (with timeout and retry per chunk), and concatenates the raw MP3
+    bytes (MP3 frames are independent so binary concatenation works).
 
     Returns the output file path.
     """
@@ -72,14 +128,7 @@ async def synthesize_chapter(
     )
 
     with open(output_path, "wb") as outfile:
-        for i, chunk in enumerate(chunks):
-            try:
-                communicate = edge_tts.Communicate(chunk, voice_id)
-                async for msg in communicate.stream():
-                    if msg["type"] == "audio":
-                        outfile.write(msg["data"])
-            except Exception:
-                logger.exception("TTS error on chunk %d/%d", i + 1, len(chunks))
-                raise
+        for i, chunk in enumerate(chunks, start=1):
+            await _synthesize_chunk(chunk, voice_id, outfile, i, len(chunks))
 
     return output_path

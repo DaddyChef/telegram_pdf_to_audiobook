@@ -25,7 +25,7 @@ from bot.keyboards import (
 )
 from pdf.extractor import extract_pages
 from pdf.chapters import detect_chapters, format_filename, Chapter
-from tts.engine import synthesize_chapter
+from tts.engine import synthesize_chapter, _split_into_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -243,14 +243,17 @@ async def handle_pdf(message: Message, bot: Bot) -> None:
             for idx, chapter in enumerate(chapters, start=1):
                 label = format_filename(book_name, chapter, idx, chapters_found)
 
+                safe_label = re.sub(r'[<>:"/\\|?*]', "_", label)
+                audio_path = os.path.join(TEMP_DIR, f"{user_id}_{safe_label}.mp3")
+
+                total_text_chunks = len(_split_into_chunks(chapter.text))
+
                 await status_msg.edit_text(
                     f"<b>Processing:</b> <code>{file_name}</code>\n"
                     f"<b>Converting:</b> {idx}/{total_chapters} — {label}\n"
-                    f"<b>Status:</b> <i>Generating audio...</i>"
+                    f"<b>Status:</b> <i>Generating audio "
+                    f"({total_text_chunks} chunk(s))...</i>"
                 )
-
-                safe_label = re.sub(r'[<>:"/\\|?*]', "_", label)
-                audio_path = os.path.join(TEMP_DIR, f"{user_id}_{safe_label}.mp3")
 
                 await synthesize_chapter(
                     text=chapter.text,
