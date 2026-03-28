@@ -12,6 +12,12 @@ if not os.path.exists(TEMP_DIR):
 # TTS chunk size in characters (edge-tts can time out on very long strings)
 TTS_CHUNK_SIZE = 4000
 
+# Timeout per TTS chunk in seconds (edge-tts can hang on some text)
+TTS_CHUNK_TIMEOUT = 120
+
+# Number of retries per chunk before giving up
+TTS_CHUNK_RETRIES = 3
+
 # Pages with fewer characters than this are considered blank/irrelevant
 MIN_PAGE_CHARS = 30
 
