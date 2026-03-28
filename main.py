@@ -27,6 +27,7 @@ router = Router()
 # Data structure for voices
 LANGUAGES = {
     "Ukrainian": ["uk-UA-OstapNeural", "uk-UA-PolinaNeural"],
+    "Polish": ["pl-PL-MarekNeural", "pl-PL-ZofiaNeural"],
     "English": ["en-CA-LiamNeural", "en-US-RogerNeural", "en-GB-SoniaNeural"],
     "Italian": ["it-IT-DiegoNeural", "it-IT-ElsaNeural", "it-IT-IsabellaNeural"]
 }
@@ -103,11 +104,12 @@ async def preview_voice(callback: CallbackQuery):
     greetings = {
         "uk": f"Вітаю, я {name}. Я прочитаю вашу книгу для вас!",
         "it": f"Ciao, sono {name}. Leggerò il tuo libro per te!",
-        "en": f"Hello, I am {name}. I will read a book for you!"
+        "en": f"Hello, I am {name}. I will read your book for you!",
+        "pl": f"Cześć, jestem {name}. Przeczytam dla Ciebie twoją książkę!"
     }
     
     # Get the translation or default to English if the language isn't found
-    text = greetings.get(lang_code, f"Hello, I am {name}. I will read a book for you!")
+    text = greetings.get(lang_code, f"Hello, I am {name}. I will read your book for you!")
     
     filename = os.path.join(TEMP_DIR, f"prev_{callback.from_user.id}.mp3")
     status = await callback.message.answer("⏳ <i>Generating sample...</i>")
